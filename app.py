@@ -246,6 +246,48 @@ def render_visualizations(chart_data):
             st.markdown(f"**{key}:**")
             for v in values:
                 st.markdown(f"- {v}")
+
+
+# ⬇️ NEW FEATURE: Upload & Compare Own Report
+from PyPDF2 import PdfReader
+
+def extract_text_from_pdf(file):
+    reader = PdfReader(file)
+    return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+
+def upload_and_compare():
+    st.markdown("### 📤 Upload Your Report for Benchmarking")
+    uploaded_file = st.file_uploader("Upload Company Report (PDF)", type=["pdf"])
+    competitor = st.text_input("Enter Competitor Name for Web Comparison")
+
+    if uploaded_file and competitor:
+        with st.spinner("🔍 Fetching data and comparing..."):
+            internal_text = extract_text_from_pdf(uploaded_file)
+            external_data = tavily_market_research_tool(f"{competitor} strategy analysis")
+            summary_text = "\n\n".join([r["content"][:300] for r in external_data["results"][:3]])
+
+            prompt = PromptTemplate.from_template("""
+            Compare the internal company report and external competitor insights.
+
+            📄 Internal Report:
+            {internal_text}
+
+            🌐 External Insights:
+            {external_text}
+
+            Write a consulting-style comparative summary with strengths, weaknesses, opportunities, and suggestions.
+            """)
+            chain = prompt | get_azure_llm(max_tokens=1200) | StrOutputParser()
+            result = chain.invoke({
+                "internal_text": internal_text,
+                "external_text": summary_text
+            })
+
+            st.markdown("### 🧠 Comparative Analysis Result")
+            st.markdown(result)
+
+
+
 def main():
     st.set_page_config(page_title="AI Market Insights | Competitive Intelligence Bot", layout="wide")
 
@@ -256,7 +298,7 @@ def main():
     """, unsafe_allow_html=True)
 
 
-    menu = st.sidebar.radio("📂 Navigate", ["Home", "Competitve Intelligence", "Consulting Insights","Graphical Insight"])
+    menu = st.sidebar.radio("📂 Navigate", ["Home", "Competitve Intelligence", "Consulting Insights","Graphical Insight","Upload Report"])
 
 
     if menu == "Home":
@@ -299,6 +341,9 @@ def main():
             render_visualizations(chart_data)
         except Exception as e:
             st.error("⚠️ No chart_data.json found. Please analyze a topic first.")
+
+    elif menu == "Upload Report":
+        upload_and_compare()
 
 
 if __name__ == "__main__":
